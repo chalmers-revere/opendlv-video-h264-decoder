@@ -99,7 +99,7 @@ int32_t main(int32_t argc, char **argv) {
                 const uint32_t LEN{static_cast<uint32_t>(data.size())};
 
                 if (0 != decoder->DecodeFrame2(reinterpret_cast<const unsigned char*>(data.c_str()), LEN, yuvData, &bufferInfo)) {
-                    std::cerr << argv[0] << ": H264 decoding for current frame failed." << std::endl;
+                    std::cerr << "H264 decoding for current frame failed." << std::endl;
                 }
                 else {
                     if (1 == bufferInfo.iBufferStatus) {
