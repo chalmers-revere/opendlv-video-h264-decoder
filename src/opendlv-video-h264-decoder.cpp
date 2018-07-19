@@ -18,26 +18,29 @@
 #include "cluon-complete.hpp"
 #include "opendlv-standard-message-set.hpp"
 
-extern "C" {
-    #include <wels/codec_api.h>
-    #include <libyuv.h>
-}
-
+#include <wels/codec_api.h>
+#include <libyuv.h>
 #include <X11/Xlib.h>
 
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <memory>
 
 int32_t main(int32_t argc, char **argv) {
     int32_t retCode{1};
     auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
-    if (0 == commandlineArguments.count("cid")) {
-        std::cerr << argv[0] << " listens for H264 frames for display." << std::endl;
-        std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> [--verbose]" << std::endl;
-        std::cerr << "Example: " << argv[0] << " --cid=111" << std::endl;
+    if ( (0 == commandlineArguments.count("cid")) ||
+         (0 == commandlineArguments.count("name")) ) {
+        std::cerr << argv[0] << " listens for H264 frames in an OD4Session to decode as ARGB image data into a shared memory area." << std::endl;
+        std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> --name=<name of shared memory area> [--verbose]" << std::endl;
+        std::cerr << "         --cid:     CID of the OD4Session to send h264 frames" << std::endl;
+        std::cerr << "         --name:    name of the shared memory area to create" << std::endl;
+        std::cerr << "         --verbose: print decoding information and display image" << std::endl;
+        std::cerr << "Example: " << argv[0] << " --cid=111 --name=data --verbose" << std::endl;
     }
     else {
+        const std::string NAME{commandlineArguments["name"]};
         const bool VERBOSE{commandlineArguments.count("verbose") != 0};
 
         ISVCDecoder *decoder{nullptr};
@@ -51,10 +54,11 @@ int32_t main(int32_t argc, char **argv) {
         decoder->SetOption(DECODER_OPTION_TRACE_LEVEL, &logLevel);
 
         SDecodingParam decodingParam;
-        memset(&decodingParam, 0, sizeof (SDecodingParam));
-        decodingParam.eEcActiveIdc = ERROR_CON_DISABLE;
-        decodingParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_DEFAULT;
-
+        {
+            memset(&decodingParam, 0, sizeof(SDecodingParam));
+            decodingParam.eEcActiveIdc = ERROR_CON_DISABLE;
+            decodingParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_DEFAULT;
+        }
         if (cmResultSuccess != decoder->Initialize(&decodingParam)) {
             std::cerr << argv[0] << ": Failed to initialize openh264 decoder." << std::endl;
             return retCode;
@@ -63,49 +67,57 @@ int32_t main(int32_t argc, char **argv) {
         // Interface to a running OpenDaVINCI session (ignoring any incoming Envelopes).
         cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
 
-        uint8_t *imageRGBA{nullptr};
+        std::unique_ptr<cluon::SharedMemory> sharedMemory(nullptr);
 
         Display *display{nullptr};
         Visual *visual{nullptr};
         Window window{0};
         XImage *ximage{nullptr};
 
-        auto onNewImage = [&decoder, &imageRGBA, &display, &visual, &window, &ximage, &VERBOSE](cluon::data::Envelope &&env){
+        auto onNewImage = [&decoder, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE](cluon::data::Envelope &&env){
             opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
             const uint32_t WIDTH = img.width();
             const uint32_t HEIGHT = img.height();
 
-            if (nullptr == imageRGBA) {
-                imageRGBA = new uint8_t[WIDTH * HEIGHT * 4];
+            if (!sharedMemory) {
+                sharedMemory.reset(new cluon::SharedMemory{NAME, WIDTH * HEIGHT * 4});
                 if (VERBOSE) {
                     display = XOpenDisplay(NULL);
                     visual = DefaultVisual(display, 0);
                     window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
-                    ximage = XCreateImage(display, visual, 24, ZPixmap, 0, reinterpret_cast<char*>(imageRGBA), WIDTH, HEIGHT, 32, 0);
+                    ximage = XCreateImage(display, visual, 24, ZPixmap, 0, reinterpret_cast<char*>(sharedMemory->data()), WIDTH, HEIGHT, 32, 0);
                     XMapWindow(display, window);
                 }
             }
-            if (nullptr != imageRGBA) {
+            if (sharedMemory) {
                 uint8_t* yuvData[3];
+
                 SBufferInfo bufferInfo;
                 memset(&bufferInfo, 0, sizeof (SBufferInfo));
-                std::string d{img.data()};
-                const uint32_t LEN{static_cast<uint32_t>(d.size())};
-                if (0 != decoder->DecodeFrame2(reinterpret_cast<const unsigned char*>(d.c_str()), LEN, yuvData, &bufferInfo)) {
-                    std::cerr << "H264 decoding for current frame failed." << std::endl;
+
+                std::string data{img.data()};
+                const uint32_t LEN{static_cast<uint32_t>(data.size())};
+
+                if (0 != decoder->DecodeFrame2(reinterpret_cast<const unsigned char*>(data.c_str()), LEN, yuvData, &bufferInfo)) {
+                    std::cerr << argv[0] << ": H264 decoding for current frame failed." << std::endl;
                 }
                 else {
                     if (1 == bufferInfo.iBufferStatus) {
-                        libyuv::I420ToARGB(yuvData[0], bufferInfo.UsrData.sSystemBuffer.iStride[0], yuvData[1], bufferInfo.UsrData.sSystemBuffer.iStride[1], yuvData[2], bufferInfo.UsrData.sSystemBuffer.iStride[1], imageRGBA, WIDTH * 4, WIDTH, HEIGHT);
-
-                        if (VERBOSE) {
-                            XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
+                        sharedMemory->lock();
+                        {
+                            libyuv::I420ToARGB(yuvData[0], bufferInfo.UsrData.sSystemBuffer.iStride[0], yuvData[1], bufferInfo.UsrData.sSystemBuffer.iStride[1], yuvData[2], bufferInfo.UsrData.sSystemBuffer.iStride[1], reinterpret_cast<uint8_t*>(sharedMemory->data()), WIDTH * 4, WIDTH, HEIGHT);
+                            if (VERBOSE) {
+                                XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
+                            }
                         }
+                        sharedMemory->unlock();
+                        sharedMemory->notifyAll();
                     }
                 }
             }
         };
 
+        // Register lambda to handle incoming frames.
         od4.dataTrigger(opendlv::proxy::ImageReading::ID(), onNewImage);
 
         while (od4.isRunning()) {
@@ -121,9 +133,6 @@ int32_t main(int32_t argc, char **argv) {
         if (VERBOSE) {
             XCloseDisplay(display);
         }
-
-        delete [] imageRGBA;
-
         retCode = 0;
     }
     return retCode;
