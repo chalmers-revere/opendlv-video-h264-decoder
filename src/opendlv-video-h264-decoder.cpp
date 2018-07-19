@@ -76,42 +76,44 @@ int32_t main(int32_t argc, char **argv) {
 
         auto onNewImage = [&decoder, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE](cluon::data::Envelope &&env){
             opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
-            const uint32_t WIDTH = img.width();
-            const uint32_t HEIGHT = img.height();
+            if ("h264" == img.format()) {
+                const uint32_t WIDTH = img.width();
+                const uint32_t HEIGHT = img.height();
 
-            if (!sharedMemory) {
-                sharedMemory.reset(new cluon::SharedMemory{NAME, WIDTH * HEIGHT * 4});
-                if (VERBOSE) {
-                    display = XOpenDisplay(NULL);
-                    visual = DefaultVisual(display, 0);
-                    window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
-                    ximage = XCreateImage(display, visual, 24, ZPixmap, 0, reinterpret_cast<char*>(sharedMemory->data()), WIDTH, HEIGHT, 32, 0);
-                    XMapWindow(display, window);
+                if (!sharedMemory) {
+                    sharedMemory.reset(new cluon::SharedMemory{NAME, WIDTH * HEIGHT * 4});
+                    if (VERBOSE) {
+                        display = XOpenDisplay(NULL);
+                        visual = DefaultVisual(display, 0);
+                        window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
+                        ximage = XCreateImage(display, visual, 24, ZPixmap, 0, reinterpret_cast<char*>(sharedMemory->data()), WIDTH, HEIGHT, 32, 0);
+                        XMapWindow(display, window);
+                    }
                 }
-            }
-            if (sharedMemory) {
-                uint8_t* yuvData[3];
+                if (sharedMemory) {
+                    uint8_t* yuvData[3];
 
-                SBufferInfo bufferInfo;
-                memset(&bufferInfo, 0, sizeof (SBufferInfo));
+                    SBufferInfo bufferInfo;
+                    memset(&bufferInfo, 0, sizeof (SBufferInfo));
 
-                std::string data{img.data()};
-                const uint32_t LEN{static_cast<uint32_t>(data.size())};
+                    std::string data{img.data()};
+                    const uint32_t LEN{static_cast<uint32_t>(data.size())};
 
-                if (0 != decoder->DecodeFrame2(reinterpret_cast<const unsigned char*>(data.c_str()), LEN, yuvData, &bufferInfo)) {
-                    std::cerr << "H264 decoding for current frame failed." << std::endl;
-                }
-                else {
-                    if (1 == bufferInfo.iBufferStatus) {
-                        sharedMemory->lock();
-                        {
-                            libyuv::I420ToARGB(yuvData[0], bufferInfo.UsrData.sSystemBuffer.iStride[0], yuvData[1], bufferInfo.UsrData.sSystemBuffer.iStride[1], yuvData[2], bufferInfo.UsrData.sSystemBuffer.iStride[1], reinterpret_cast<uint8_t*>(sharedMemory->data()), WIDTH * 4, WIDTH, HEIGHT);
-                            if (VERBOSE) {
-                                XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
+                    if (0 != decoder->DecodeFrame2(reinterpret_cast<const unsigned char*>(data.c_str()), LEN, yuvData, &bufferInfo)) {
+                        std::cerr << "H264 decoding for current frame failed." << std::endl;
+                    }
+                    else {
+                        if (1 == bufferInfo.iBufferStatus) {
+                            sharedMemory->lock();
+                            {
+                                libyuv::I420ToARGB(yuvData[0], bufferInfo.UsrData.sSystemBuffer.iStride[0], yuvData[1], bufferInfo.UsrData.sSystemBuffer.iStride[1], yuvData[2], bufferInfo.UsrData.sSystemBuffer.iStride[1], reinterpret_cast<uint8_t*>(sharedMemory->data()), WIDTH * 4, WIDTH, HEIGHT);
+                                if (VERBOSE) {
+                                    XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
+                                }
                             }
+                            sharedMemory->unlock();
+                            sharedMemory->notifyAll();
                         }
-                        sharedMemory->unlock();
-                        sharedMemory->notifyAll();
                     }
                 }
             }
