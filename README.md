@@ -65,6 +65,7 @@ The parameters to the application are:
 
 * `--cid=111`: Identifier of the OD4Session to broadcast the h264 frames to
 * `--name=XYZ`: Name of the shared memory area to create for storing the ARGB image data
+* `--verbose`: Display decoding information and render the image to screen (requires X11)
 
 
 ## License
