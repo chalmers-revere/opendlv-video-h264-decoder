@@ -43,6 +43,8 @@ To run this microservice using `docker-compose`, you can simply add the followin
 section to your `docker-compose.yml` file to let Docker build this software for you:
 
 ```yml
+version: '2' # Must be present exactly once at the beginning of the docker-compose.yml file
+services:    # Must be present exactly once at the beginning of the docker-compose.yml file
     video-h264-decoder-amd64:
         build:
             context: https://github.com/chalmers-revere/opendlv-video-h264-decoder.git
