@@ -52,6 +52,8 @@ section to your `docker-compose.yml` file to let Docker build this software for 
         ipc: "host"
         volumes:
         - /tmp:/tmp
+        environment:
+        - DISPLAY=${DISPLAY}
         command: "--cid=111 --name=imageData"
 ```
 
@@ -63,9 +65,10 @@ in an `OD4Session` from OpenDLV. The folder `/tmp` is shared into the Docker
 container to provide tokens describing the shared memory area.
 The parameters to the application are:
 
-* `--cid=111`: Identifier of the OD4Session to broadcast the h264 frames to
+* `--cid=111`: Identifier of the OD4Session to listen for h264 frames
+* `--id=2`: Optional identifier to listen only for those h264 frames with the matching senderStamp of the OD4Session
 * `--name=XYZ`: Name of the shared memory area to create for storing the ARGB image data
-* `--verbose`: Display decoding information and render the image to screen (requires X11)
+* `--verbose`: Display decoding information and render the image to screen (requires X11; run `xhost +` to allow access to you X11 server)
 
 
 ## License
