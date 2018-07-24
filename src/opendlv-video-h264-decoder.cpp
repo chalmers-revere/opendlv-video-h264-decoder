@@ -59,6 +59,7 @@ int32_t main(int32_t argc, char **argv) {
         {
             memset(&decodingParam, 0, sizeof(SDecodingParam));
             decodingParam.eEcActiveIdc = ERROR_CON_DISABLE;
+            decodingParam.bParseOnly = false;
             decodingParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_DEFAULT;
         }
         if (cmResultSuccess != decoder->Initialize(&decodingParam)) {
