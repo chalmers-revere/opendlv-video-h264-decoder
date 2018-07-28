@@ -80,7 +80,7 @@ int32_t main(int32_t argc, char **argv) {
         auto onNewImage = [&decoder, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE, &ID](cluon::data::Envelope &&env){
             if (ID == env.senderStamp()) {
                 opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
-                if ("h264" == img.format()) {
+                if ("h264" == img.fourcc()) {
                     const uint32_t WIDTH = img.width();
                     const uint32_t HEIGHT = img.height();
 

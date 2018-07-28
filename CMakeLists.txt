@@ -19,7 +19,7 @@ project(opendlv-video-h264-decoder)
 
 ################################################################################
 # Defining the relevant versions of OpenDLV Standard Message Set and libcluon.
-set(OPENDLV_STANDARD_MESSAGE_SET opendlv-standard-message-set-v0.9.5.odvd)
+set(OPENDLV_STANDARD_MESSAGE_SET opendlv-standard-message-set-v0.9.6.odvd)
 set(CLUON_COMPLETE cluon-complete-v0.0.105.hpp)
 
 ################################################################################
