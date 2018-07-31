@@ -32,7 +32,7 @@ RUN cd tmp && \
     cd libyuv &&\
     make -f linux.mk libyuv.a && cp libyuv.a /usr/lib/x86_64-linux-gnu && cd include && cp -r * /usr/include
 RUN cd tmp && \
-    git clone --depth 1 https://github.com/cisco/openh264.git && \
+    git clone --depth 1 --branch v1.8.0 https://github.com/cisco/openh264.git && \
     cd openh264 && mkdir b && cd b \
     make -j2 -f ../Makefile libraries && make -f ../Makefile install
 ADD . /opt/sources
