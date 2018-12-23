@@ -79,6 +79,7 @@ int32_t main(int32_t argc, char **argv) {
 
         auto onNewImage = [&decoder, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE, &ID](cluon::data::Envelope &&env){
             if (ID == env.senderStamp()) {
+                cluon::data::TimeStamp sampleTimeStamp = env.sampleTimeStamp();
                 opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
                 if ("h264" == img.fourcc()) {
                     const uint32_t WIDTH = img.width();
@@ -110,6 +111,7 @@ int32_t main(int32_t argc, char **argv) {
                         else {
                             if (1 == bufferInfo.iBufferStatus) {
                                 sharedMemory->lock();
+                                sharedMemory->setTimeStamp(sampleTimeStamp);
                                 {
                                     libyuv::I420ToARGB(yuvData[0], bufferInfo.UsrData.sSystemBuffer.iStride[0], yuvData[1], bufferInfo.UsrData.sSystemBuffer.iStride[1], yuvData[2], bufferInfo.UsrData.sSystemBuffer.iStride[1], reinterpret_cast<uint8_t*>(sharedMemory->data()), WIDTH * 4, WIDTH, HEIGHT);
                                     if (VERBOSE) {
