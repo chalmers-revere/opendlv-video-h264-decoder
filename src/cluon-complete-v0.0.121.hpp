@@ -1,6 +1,6 @@
 // This is an auto-generated header-only single-file distribution of libcluon.
-// Date: Sat, 22 Dec 2018 22:54:42 +0100
-// Version: 0.0.117
+// Date: Sun, 03 Mar 2019 20:03:13 +0100
+// Version: 0.0.121
 //
 //
 // Implementation of N4562 std::experimental::any (merged into C++17) for C++11 compilers.
@@ -924,6 +924,9 @@ struct SemanticValues : protected std::vector<any>
         return peg::line_info(ss, s_);
     }
 
+    // Choice count
+    size_t      choice_count() const { return choice_count_; }
+
     // Choice number (0 based index)
     size_t      choice() const { return choice_; }
 
@@ -945,7 +948,7 @@ struct SemanticValues : protected std::vector<any>
         return this->transform(beg, end, [](const any& v) { return v.get<T>(); });
     }
 
-    SemanticValues() : s_(nullptr), n_(0), choice_(0) {}
+    SemanticValues() : s_(nullptr), n_(0), choice_count_(0), choice_(0) {}
 
     using std::vector<any>::iterator;
     using std::vector<any>::const_iterator;
@@ -972,11 +975,13 @@ struct SemanticValues : protected std::vector<any>
 
 private:
     friend class Context;
+    friend class Sequence;
     friend class PrioritizedChoice;
     friend class Holder;
 
     const char* s_;
     size_t      n_;
+    size_t      choice_count_;
     size_t      choice_;
 
     template <typename F>
@@ -996,6 +1001,17 @@ private:
             r.emplace_back(f((*this)[i]));
         }
         return r;
+    }
+
+    void reset() {
+        path = nullptr;
+        ss = nullptr;
+        tokens.clear();
+
+        s_ = nullptr;
+        n_ = 0;
+        choice_count_ = 0;
+        choice_ = 0;
     }
 };
 
@@ -1064,61 +1080,111 @@ public:
         return bool(fn_);
     }
 
-    any operator()(const SemanticValues& sv, any& dt) const {
+    any operator()(SemanticValues& sv, any& dt) const {
         return fn_(sv, dt);
     }
 
 private:
     template <typename R>
-    struct TypeAdaptor {
-        TypeAdaptor(std::function<R (const SemanticValues& sv)> fn)
+    struct TypeAdaptor_sv {
+        TypeAdaptor_sv(std::function<R (SemanticValues& sv)> fn)
             : fn_(fn) {}
-        any operator()(const SemanticValues& sv, any& /*dt*/) {
+        any operator()(SemanticValues& sv, any& /*dt*/) {
+            return call<R>(fn_, sv);
+        }
+        std::function<R (SemanticValues& sv)> fn_;
+    };
+
+    template <typename R>
+    struct TypeAdaptor_csv {
+        TypeAdaptor_csv(std::function<R (const SemanticValues& sv)> fn)
+            : fn_(fn) {}
+        any operator()(SemanticValues& sv, any& /*dt*/) {
             return call<R>(fn_, sv);
         }
         std::function<R (const SemanticValues& sv)> fn_;
     };
 
     template <typename R>
-    struct TypeAdaptor_c {
-        TypeAdaptor_c(std::function<R (const SemanticValues& sv, any& dt)> fn)
+    struct TypeAdaptor_sv_dt {
+        TypeAdaptor_sv_dt(std::function<R (SemanticValues& sv, any& dt)> fn)
             : fn_(fn) {}
-        any operator()(const SemanticValues& sv, any& dt) {
+        any operator()(SemanticValues& sv, any& dt) {
+            return call<R>(fn_, sv, dt);
+        }
+        std::function<R (SemanticValues& sv, any& dt)> fn_;
+    };
+
+    template <typename R>
+    struct TypeAdaptor_csv_dt {
+        TypeAdaptor_csv_dt(std::function<R (const SemanticValues& sv, any& dt)> fn)
+            : fn_(fn) {}
+        any operator()(SemanticValues& sv, any& dt) {
             return call<R>(fn_, sv, dt);
         }
         std::function<R (const SemanticValues& sv, any& dt)> fn_;
     };
 
-    typedef std::function<any (const SemanticValues& sv, any& dt)> Fty;
+    typedef std::function<any (SemanticValues& sv, any& dt)> Fty;
+
+    template<typename F, typename R>
+    Fty make_adaptor(F fn, R (F::* /*mf*/)(SemanticValues& sv) const) {
+        return TypeAdaptor_sv<R>(fn);
+    }
 
     template<typename F, typename R>
     Fty make_adaptor(F fn, R (F::* /*mf*/)(const SemanticValues& sv) const) {
-        return TypeAdaptor<R>(fn);
+        return TypeAdaptor_csv<R>(fn);
+    }
+
+    template<typename F, typename R>
+    Fty make_adaptor(F fn, R (F::* /*mf*/)(SemanticValues& sv)) {
+        return TypeAdaptor_sv<R>(fn);
     }
 
     template<typename F, typename R>
     Fty make_adaptor(F fn, R (F::* /*mf*/)(const SemanticValues& sv)) {
-        return TypeAdaptor<R>(fn);
+        return TypeAdaptor_csv<R>(fn);
+    }
+
+    template<typename F, typename R>
+    Fty make_adaptor(F fn, R (* /*mf*/)(SemanticValues& sv)) {
+        return TypeAdaptor_sv<R>(fn);
     }
 
     template<typename F, typename R>
     Fty make_adaptor(F fn, R (* /*mf*/)(const SemanticValues& sv)) {
-        return TypeAdaptor<R>(fn);
+        return TypeAdaptor_csv<R>(fn);
+    }
+
+    template<typename F, typename R>
+    Fty make_adaptor(F fn, R (F::* /*mf*/)(SemanticValues& sv, any& dt) const) {
+        return TypeAdaptor_sv_dt<R>(fn);
     }
 
     template<typename F, typename R>
     Fty make_adaptor(F fn, R (F::* /*mf*/)(const SemanticValues& sv, any& dt) const) {
-        return TypeAdaptor_c<R>(fn);
+        return TypeAdaptor_csv_dt<R>(fn);
+    }
+
+    template<typename F, typename R>
+    Fty make_adaptor(F fn, R (F::* /*mf*/)(SemanticValues& sv, any& dt)) {
+        return TypeAdaptor_sv_dt<R>(fn);
     }
 
     template<typename F, typename R>
     Fty make_adaptor(F fn, R (F::* /*mf*/)(const SemanticValues& sv, any& dt)) {
-        return TypeAdaptor_c<R>(fn);
+        return TypeAdaptor_csv_dt<R>(fn);
+    }
+
+    template<typename F, typename R>
+    Fty make_adaptor(F fn, R(* /*mf*/)(SemanticValues& sv, any& dt)) {
+        return TypeAdaptor_sv_dt<R>(fn);
     }
 
     template<typename F, typename R>
     Fty make_adaptor(F fn, R(* /*mf*/)(const SemanticValues& sv, any& dt)) {
-        return TypeAdaptor_c<R>(fn);
+        return TypeAdaptor_csv_dt<R>(fn);
     }
 
     Fty fn_;
@@ -1261,11 +1327,9 @@ public:
         if (!sv.empty()) {
             sv.clear();
         }
+        sv.reset();
         sv.path = path;
         sv.ss = s;
-        sv.s_ = nullptr;
-        sv.n_ = 0;
-        sv.tokens.clear();
         return sv;
     }
 
@@ -1350,17 +1414,22 @@ public:
 
     size_t parse(const char* s, size_t n, SemanticValues& sv, Context& c, any& dt) const override {
         c.trace("Sequence", s, n, sv, dt);
+        auto& chldsv = c.push();
         size_t i = 0;
         for (const auto& ope : opes_) {
             c.nest_level++;
             auto se = make_scope_exit([&]() { c.nest_level--; });
             const auto& rule = *ope;
-            auto len = rule.parse(s + i, n - i, sv, c, dt);
+            auto len = rule.parse(s + i, n - i, chldsv, c, dt);
             if (fail(len)) {
                 return static_cast<size_t>(-1);
             }
             i += len;
         }
+        sv.insert(sv.end(), chldsv.begin(), chldsv.end());
+        sv.s_ = chldsv.c_str();
+        sv.n_ = chldsv.length();
+        sv.tokens.insert(sv.tokens.end(), chldsv.tokens.begin(), chldsv.tokens.end());
         return i;
     }
 
@@ -1406,11 +1475,10 @@ public:
             const auto& rule = *ope;
             auto len = rule.parse(s, n, chldsv, c, dt);
             if (success(len)) {
-                if (!chldsv.empty()) {
-                    sv.insert(sv.end(), chldsv.begin(), chldsv.end());
-                }
+                sv.insert(sv.end(), chldsv.begin(), chldsv.end());
                 sv.s_ = chldsv.c_str();
                 sv.n_ = chldsv.length();
+                sv.choice_count_ = opes_.size();
                 sv.choice_ = id;
                 sv.tokens.insert(sv.tokens.end(), chldsv.tokens.begin(), chldsv.tokens.end());
 
@@ -1643,8 +1711,8 @@ public:
     void accept(Visitor& v) override;
 
     std::string lit_;
-	mutable bool init_is_word_;
-	mutable bool is_word_;
+    mutable bool init_is_word_;
+    mutable bool is_word_;
 };
 
 class CharacterClass : public Ope
@@ -1852,7 +1920,7 @@ public:
 
     void accept(Visitor& v) override;
 
-    any reduce(const SemanticValues& sv, any& dt) const;
+    any reduce(SemanticValues& sv, any& dt) const;
 
     std::shared_ptr<Ope> ope_;
     Definition*          outer_;
@@ -2508,27 +2576,27 @@ inline size_t parse_literal(const char* s, size_t n, SemanticValues& sv, Context
         }
     }
 
-	// Word check
+    // Word check
     static Context dummy_c(nullptr, lit.data(), lit.size(), 0, nullptr, nullptr, false, nullptr);
     static SemanticValues dummy_sv;
     static any dummy_dt;
 
     if (!init_is_word) { // TODO: Protect with mutex
-		if (c.wordOpe) {
-			auto len = c.wordOpe->parse(lit.data(), lit.size(), dummy_sv, dummy_c, dummy_dt);
-			is_word = success(len);
-		}
+        if (c.wordOpe) {
+            auto len = c.wordOpe->parse(lit.data(), lit.size(), dummy_sv, dummy_c, dummy_dt);
+            is_word = success(len);
+        }
         init_is_word = true;
     }
 
-	if (is_word) {
+    if (is_word) {
         auto ope = std::make_shared<NotPredicate>(c.wordOpe);
-		auto len = ope->parse(s + i, n - i, dummy_sv, dummy_c, dummy_dt);
-		if (fail(len)) {
+        auto len = ope->parse(s + i, n - i, dummy_sv, dummy_c, dummy_dt);
+        if (fail(len)) {
             return static_cast<size_t>(-1);
-		}
+        }
         i += len;
-	}
+    }
 
     // Skip whiltespace
     if (!c.in_token) {
@@ -2550,7 +2618,7 @@ inline size_t LiteralString::parse(const char* s, size_t n, SemanticValues& sv, 
 }
 
 inline size_t TokenBoundary::parse(const char* s, size_t n, SemanticValues& sv, Context& c, any& dt) const {
-	c.in_token = true;
+    c.in_token = true;
     auto se = make_scope_exit([&]() { c.in_token = false; });
     const auto& rule = *ope_;
     auto len = rule.parse(s, n, sv, c, dt);
@@ -2642,45 +2710,45 @@ inline size_t Holder::parse(const char* s, size_t n, SemanticValues& sv, Context
     return len;
 }
 
-inline any Holder::reduce(const SemanticValues& sv, any& dt) const {
+inline any Holder::reduce(SemanticValues& sv, any& dt) const {
     if (outer_->action) {
         return outer_->action(sv, dt);
     } else if (sv.empty()) {
         return any();
     } else {
-        return sv.front();
+        return std::move(sv.front());
     }
 }
 
 inline size_t Reference::parse(
     const char* s, size_t n, SemanticValues& sv, Context& c, any& dt) const {
-	if (rule_) {
-		// Reference rule
-		if (rule_->is_macro) {
+    if (rule_) {
+        // Reference rule
+        if (rule_->is_macro) {
             // Macro
             FindReference vis(c.top_args(), rule_->params);
 
-			// Collect arguments
+            // Collect arguments
             std::vector<std::shared_ptr<Ope>> args;
             for (auto arg: args_) {
-				arg->accept(vis);
-				args.push_back(vis.found_ope);
-			}
+                arg->accept(vis);
+                args.push_back(vis.found_ope);
+            }
 
-			c.push_args(args);
+            c.push_args(args);
             auto se = make_scope_exit([&]() { c.pop_args(); });
             auto ope = get_core_operator();
-			return ope->parse(s, n, sv, c, dt);
-		} else {
-			// Definition
+            return ope->parse(s, n, sv, c, dt);
+        } else {
+            // Definition
             auto ope = get_core_operator();
             return ope->parse(s, n, sv, c, dt);
-		}
-	} else {
-		// Reference parameter in macro
-		const auto& args = c.top_args();
-		return args[iarg_]->parse(s, n, sv, c, dt);
-	}
+        }
+    } else {
+        // Reference parameter in macro
+        const auto& args = c.top_args();
+        return args[iarg_]->parse(s, n, sv, c, dt);
+    }
 }
 
 inline std::shared_ptr<Ope> Reference::get_core_operator() const {
@@ -3308,12 +3376,18 @@ inline constexpr unsigned int operator "" _(const char* s, size_t) {
 template <typename Annotation>
 struct AstBase : public Annotation
 {
-    AstBase(const char* a_path, size_t a_line, size_t a_column, const char* a_name, const std::vector<std::shared_ptr<AstBase>>& a_nodes)
+    AstBase(const char* a_path, size_t a_line, size_t a_column,
+            const char* a_name, size_t a_choice_count, size_t a_choice,
+            const std::vector<std::shared_ptr<AstBase>>& a_nodes)
         : path(a_path ? a_path : "")
         , line(a_line)
         , column(a_column)
         , name(a_name)
+        , choice_count(a_choice_count)
+        , choice(a_choice)
         , original_name(a_name)
+        , original_choice_count(a_choice_count)
+        , original_choice(a_choice)
 #ifndef PEGLIB_NO_CONSTEXPR_SUPPORT
         , tag(str2tag(a_name))
         , original_tag(tag)
@@ -3322,12 +3396,18 @@ struct AstBase : public Annotation
         , nodes(a_nodes)
     {}
 
-    AstBase(const char* a_path, size_t a_line, size_t a_column, const char* a_name, const std::string& a_token)
+    AstBase(const char* a_path, size_t a_line, size_t a_column,
+            const char* a_name, size_t a_choice_count, size_t a_choice,
+            const std::string& a_token)
         : path(a_path ? a_path : "")
         , line(a_line)
         , column(a_column)
         , name(a_name)
+        , choice_count(a_choice_count)
+        , choice(a_choice)
         , original_name(a_name)
+        , original_choice_count(a_choice_count)
+        , original_choice(a_choice)
 #ifndef PEGLIB_NO_CONSTEXPR_SUPPORT
         , tag(str2tag(a_name))
         , original_tag(tag)
@@ -3336,12 +3416,17 @@ struct AstBase : public Annotation
         , token(a_token)
     {}
 
-    AstBase(const AstBase& ast, const char* a_original_name)
+    AstBase(const AstBase& ast, const char* a_original_name,
+            size_t a_original_choice_count, size_t a_original_choise)
         : path(ast.path)
         , line(ast.line)
         , column(ast.column)
         , name(ast.name)
+        , choice_count(ast.choice_count)
+        , choice(ast.choice)
         , original_name(a_original_name)
+        , original_choice_count(a_original_choice_count)
+        , original_choice(a_original_choise)
 #ifndef PEGLIB_NO_CONSTEXPR_SUPPORT
         , tag(ast.tag)
         , original_tag(str2tag(a_original_name))
@@ -3357,7 +3442,11 @@ struct AstBase : public Annotation
     const size_t                      column;
 
     const std::string                 name;
+    const size_t                      choice_count;
+    const size_t                      choice;
     const std::string                 original_name;
+    const size_t                      original_choice_count;
+    const size_t                      original_choice;
 #ifndef PEGLIB_NO_CONSTEXPR_SUPPORT
     const unsigned int                tag;
     const unsigned int                original_tag;
@@ -3381,11 +3470,12 @@ void ast_to_s_core(
     for (auto i = 0; i < level; i++) {
         s += "  ";
     }
-    std::string name;
-    if (ast.name == ast.original_name) {
-        name = ast.name;
-    } else {
-        name = ast.original_name + "[" + ast.name + "]";
+    auto name = ast.original_name;
+    if (ast.original_choice_count > 0) {
+        name += "/" + std::to_string(ast.original_choice);
+    }
+    if (ast.name != ast.original_name) {
+        name += "[" + ast.name + "]";
     }
     if (ast.is_token) {
         s += "- " + name + " (" + ast.token + ")\n";
@@ -3424,7 +3514,8 @@ struct AstOptimizer
 
         if (opt && original->nodes.size() == 1) {
             auto child = optimize(original->nodes[0], parent);
-            return std::make_shared<T>(*child, original->name.c_str());
+            return std::make_shared<T>(
+                *child, original->name.c_str(), original->choice_count, original->choice);
         }
 
         auto ast = std::make_shared<T>(*original);
@@ -3583,6 +3674,10 @@ public:
         return (*grammar_)[s];
     }
 
+    const Definition& operator[](const char* s) const {
+        return (*grammar_)[s];
+    }
+
     std::vector<std::string> get_rule_names(){
         std::vector<std::string> rules;
         rules.reserve(grammar_->size());
@@ -3610,10 +3705,16 @@ public:
                     auto line = line_info(sv.ss, sv.c_str());
 
                     if (rule.is_token()) {
-                        return std::make_shared<T>(sv.path, line.first, line.second, name.c_str(), sv.token());
+                        return std::make_shared<T>(
+                            sv.path, line.first, line.second,
+                            name.c_str(), sv.choice_count(), sv.choice(),
+                            sv.token());
                     }
 
-                    auto ast = std::make_shared<T>(sv.path, line.first, line.second, name.c_str(), sv.transform<std::shared_ptr<T>>());
+                    auto ast = std::make_shared<T>(
+                        sv.path, line.first, line.second,
+                        name.c_str(), sv.choice_count(), sv.choice(),
+                        sv.transform<std::shared_ptr<T>>());
 
                     for (auto node: ast->nodes) {
                         node->parent = ast;
@@ -3766,6 +3867,7 @@ namespace argh
       // begin() and end() for using range-for over positional args.
       std::vector<std::string>::const_iterator begin() const { return pos_args_.cbegin(); }
       std::vector<std::string>::const_iterator end()   const { return pos_args_.cend();   }
+      size_t size()                                    const { return pos_args_.size();   }
 
       //////////////////////////////////////////////////////////////////////////
       // Accessors
@@ -3811,6 +3913,7 @@ namespace argh
       bool is_number(std::string const& arg) const;
       bool is_option(std::string const& arg) const;
       bool got_flag(std::string const& name) const;
+      bool is_param(std::string const& name) const;
 
    private:
       std::vector<std::string> args_;
@@ -3861,13 +3964,30 @@ namespace argh
          }
 
          // if the option is unregistered and should be a multi-flag
-         if (1 == (args_[i].size() - name.size()) &&                  // single dash
-            argh::parser::SINGLE_DASH_IS_MULTIFLAG & mode &&         // multi-flag mode
-            registeredParams_.find(name) == registeredParams_.end()) // unregistered
+         if (1 == (args_[i].size() - name.size()) &&         // single dash
+            argh::parser::SINGLE_DASH_IS_MULTIFLAG & mode && // multi-flag mode
+            !is_param(name))                                  // unregistered
          {
+            std::string keep_param; 
+            
+            if (!name.empty() && is_param(std::string(1ul, name.back()))) // last char is param
+            {
+               keep_param += name.back();
+               name.resize(name.size() - 1);
+            }
+
             for (auto const& c : name)
             {
                flags_.emplace(std::string{ c });
+            }
+
+            if (!keep_param.empty())
+            {
+               name = keep_param;
+            }
+            else
+            {
+               continue; // do not consider other options for this arg
             }
          }
 
@@ -3887,16 +4007,21 @@ namespace argh
          // PREFER_PARAM_FOR_UNREG_OPTION: a non-registered 'name' is determined a parameter, the next arg
          //                                will be the value of that option.
 
-         if (registeredParams_.find(name) != registeredParams_.end() ||
-            argh::parser::PREFER_PARAM_FOR_UNREG_OPTION & mode)
+         assert(!(mode & argh::parser::PREFER_FLAG_FOR_UNREG_OPTION)
+             || !(mode & argh::parser::PREFER_PARAM_FOR_UNREG_OPTION));
+
+         bool preferParam = mode & argh::parser::PREFER_PARAM_FOR_UNREG_OPTION;
+
+         if (is_param(name) || preferParam)
          {
             params_.insert({ name, args_[i + 1] });
             ++i; // skip next value, it is not a free parameter
             continue;
          }
-
-         if (argh::parser::PREFER_FLAG_FOR_UNREG_OPTION & mode)
+         else
+         {
             flags_.emplace(name);
+         }
       };
    }
 
@@ -3943,6 +4068,13 @@ namespace argh
    inline bool argh::parser::got_flag(std::string const& name) const
    {
       return flags_.end() != flags_.find(trim_leading_dashes(name));
+   }
+
+   //////////////////////////////////////////////////////////////////////////
+
+   inline bool argh::parser::is_param(std::string const& name) const
+   {
+      return registeredParams_.count(name);
    }
 
    //////////////////////////////////////////////////////////////////////////
@@ -4062,6 +4194,7 @@ namespace argh
          registeredParams_.insert(trim_leading_dashes(name));
    }
 }
+
 
 #endif
 
@@ -4983,6 +5116,194 @@ struct isVisitable<cluon::data::PlayerStatus> {
 };
 template<>
 struct isTripletForwardVisitable<cluon::data::PlayerStatus> {
+    static const bool value = true;
+};
+#endif
+
+
+/*
+ * THIS IS AN AUTO-GENERATED FILE. DO NOT MODIFY AS CHANGES MIGHT BE OVERWRITTEN!
+ */
+
+#ifndef VISITABLE_TYPE_TRAIT
+#define VISITABLE_TYPE_TRAIT
+#include <cstdint>
+#include <string>
+#include <utility>
+
+template<bool b>
+struct visitorSelector {
+    template<typename T, class Visitor>
+    static void impl(uint32_t fieldIdentifier, std::string &&typeName, std::string &&name, T &value, Visitor &visitor) {
+        visitor.visit(fieldIdentifier, std::move(typeName), std::move(name), value);
+    }
+};
+
+template<>
+struct visitorSelector<true> {
+    template<typename T, class Visitor>
+    static void impl(uint32_t fieldIdentifier, std::string &&typeName, std::string &&name, T &value, Visitor &visitor) {
+        visitor.visit(fieldIdentifier, std::move(typeName), std::move(name), value);
+    }
+};
+
+template<typename T>
+struct isVisitable {
+    static const bool value = false;
+};
+
+template<typename T, class Visitor>
+void doVisit(uint32_t fieldIdentifier, std::string &&typeName, std::string &&name, T &value, Visitor &visitor) {
+    visitorSelector<isVisitable<T>::value >::impl(fieldIdentifier, std::move(typeName), std::move(name), value, visitor);
+}
+#endif
+
+#ifndef TRIPLET_FORWARD_VISITABLE_TYPE_TRAIT
+#define TRIPLET_FORWARD_VISITABLE_TYPE_TRAIT
+#include <cstdint>
+#include <string>
+#include <utility>
+
+template<bool b>
+struct tripletForwardVisitorSelector {
+    template<typename T, class PreVisitor, class Visitor, class PostVisitor>
+    static void impl(uint32_t fieldIdentifier, std::string &&typeName, std::string &&name, T &value, PreVisitor &&preVisit, Visitor &&visit, PostVisitor &&postVisit) {
+        (void)preVisit;
+        (void)postVisit;
+        std::forward<Visitor>(visit)(fieldIdentifier, std::move(typeName), std::move(name), value);
+    }
+};
+
+template<>
+struct tripletForwardVisitorSelector<true> {
+    template<typename T, class PreVisitor, class Visitor, class PostVisitor>
+    static void impl(uint32_t fieldIdentifier, std::string &&typeName, std::string &&name, T &value, PreVisitor &&preVisit, Visitor &&visit, PostVisitor &&postVisit) {
+        (void)fieldIdentifier;
+        (void)typeName;
+        (void)name;
+        // Apply preVisit, visit, and postVisit on value.
+        value.accept(preVisit, visit, postVisit);
+    }
+};
+
+template<typename T>
+struct isTripletForwardVisitable {
+    static const bool value = false;
+};
+
+template< typename T, class PreVisitor, class Visitor, class PostVisitor>
+void doTripletForwardVisit(uint32_t fieldIdentifier, std::string &&typeName, std::string &&name, T &value, PreVisitor &&preVisit, Visitor &&visit, PostVisitor &&postVisit) {
+    tripletForwardVisitorSelector<isTripletForwardVisitable<T>::value >::impl(fieldIdentifier, std::move(typeName), std::move(name), value, std::move(preVisit), std::move(visit), std::move(postVisit)); // NOLINT
+}
+#endif
+
+
+#ifndef CLUON_DATA_RECORDERCOMMAND_HPP
+#define CLUON_DATA_RECORDERCOMMAND_HPP
+
+#ifdef WIN32
+    // Export symbols if compile flags "LIB_SHARED" and "LIB_EXPORTS" are set on Windows.
+    #ifdef LIB_SHARED
+        #ifdef LIB_EXPORTS
+            #define LIB_API __declspec(dllexport)
+        #else
+            #define LIB_API __declspec(dllimport)
+        #endif
+    #else
+        // Disable definition if linking statically.
+        #define LIB_API
+    #endif
+#else
+    // Disable definition for non-Win32 systems.
+    #define LIB_API
+#endif
+
+#include <string>
+#include <utility>
+namespace cluon { namespace data {
+using namespace std::string_literals; // NOLINT
+class LIB_API RecorderCommand {
+    private:
+        static constexpr const char* TheShortName = "RecorderCommand";
+        static constexpr const char* TheLongName = "cluon.data.RecorderCommand";
+
+    public:
+        inline static int32_t ID() {
+            return 11;
+        }
+        inline static const std::string ShortName() {
+            return TheShortName;
+        }
+        inline static const std::string LongName() {
+            return TheLongName;
+        }
+
+    public:
+        RecorderCommand() = default;
+        RecorderCommand(const RecorderCommand&) = default;
+        RecorderCommand& operator=(const RecorderCommand&) = default;
+        RecorderCommand(RecorderCommand&&) = default;
+        RecorderCommand& operator=(RecorderCommand&&) = default;
+        ~RecorderCommand() = default;
+
+    public:
+        
+        inline RecorderCommand& command(const uint8_t &v) noexcept {
+            m_command = v;
+            return *this;
+        }
+        inline uint8_t command() const noexcept {
+            return m_command;
+        }
+        
+
+    public:
+        template<class Visitor>
+        inline void accept(uint32_t fieldId, Visitor &visitor) {
+            (void)fieldId;
+            (void)visitor;
+//            visitor.preVisit(ID(), ShortName(), LongName());
+            
+            if (1 == fieldId) {
+                doVisit(1, std::move("uint8_t"s), std::move("command"s), m_command, visitor);
+                return;
+            }
+            
+//            visitor.postVisit();
+        }
+
+        template<class Visitor>
+        inline void accept(Visitor &visitor) {
+            visitor.preVisit(ID(), ShortName(), LongName());
+            
+            doVisit(1, std::move("uint8_t"s), std::move("command"s), m_command, visitor);
+            
+            visitor.postVisit();
+        }
+
+        template<class PreVisitor, class Visitor, class PostVisitor>
+        inline void accept(PreVisitor &&preVisit, Visitor &&visit, PostVisitor &&postVisit) {
+            (void)visit; // Prevent warnings from empty messages.
+            std::forward<PreVisitor>(preVisit)(ID(), ShortName(), LongName());
+            
+            doTripletForwardVisit(1, std::move("uint8_t"s), std::move("command"s), m_command, preVisit, visit, postVisit);
+            
+            std::forward<PostVisitor>(postVisit)();
+        }
+
+    private:
+        
+        uint8_t m_command{ 0 }; // field identifier = 1.
+        
+};
+}}
+
+template<>
+struct isVisitable<cluon::data::RecorderCommand> {
+    static const bool value = true;
+};
+template<>
+struct isTripletForwardVisitable<cluon::data::RecorderCommand> {
     static const bool value = true;
 };
 #endif
@@ -14816,11 +15137,13 @@ inline void SharedMemory::initPOSIX() noexcept {
         m_fdForTimeStamping = m_fd;
     }
 #else
+#if !defined(__NetBSD__) && !defined(__OpenBSD__)
     // On *BSDs, the POSIX shared memory lives not in /dev/shm and we have
     // need to use a separate file for timestamping.
     if (-1 != m_fd) {
         m_fdForTimeStamping = ::open(m_nameForTimeStamping.c_str(), O_CREAT|O_RDONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     }
+#endif
 #endif
 }
 
@@ -17326,13 +17649,14 @@ int32_t main(int32_t argc, char **argv) {
 //#include "cluon/MetaMessage.hpp"
 //#include "cluon/MessageParser.hpp"
 //#include "cluon/OD4Session.hpp"
+//#include "cluon/TerminateHandler.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <map>
+#include <unordered_map>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -17394,54 +17718,83 @@ inline int32_t cluon_livefeed(int32_t argc, char **argv) {
         }
 
         std::mutex mapOfLastEnvelopesMutex;
-        std::map<int32_t, std::map<uint32_t, cluon::data::Envelope> > mapOfLastEnvelopes;
+        std::unordered_map<int32_t, std::unordered_map<uint32_t, cluon::data::Envelope, cluon::UseUInt32ValueAsHashKey>, cluon::UseUInt32ValueAsHashKey> mapOfLastEnvelopes;
+        std::unordered_map<int32_t, std::unordered_map<uint32_t, float>, cluon::UseUInt32ValueAsHashKey> mapOfUpdateRates;
 
         cluon::OD4Session od4Session(static_cast<uint16_t>(std::stoi(commandlineArguments["cid"])),
-            [&](cluon::data::Envelope &&envelope) noexcept {
+            [&mapOfLastEnvelopesMutex, &mapOfLastEnvelopes, &mapOfUpdateRates](cluon::data::Envelope &&envelope) noexcept {
             std::lock_guard<std::mutex> lck(mapOfLastEnvelopesMutex);
 
-            // Update mapping for tupel (dataType, senderStamp) --> Envelope.
-            std::map<uint32_t, cluon::data::Envelope> entry = mapOfLastEnvelopes[envelope.dataType()];
-            entry[envelope.senderStamp()] = envelope;
-            mapOfLastEnvelopes[envelope.dataType()] = entry;
-
-            clearScreen();
-
-            const auto LAST_TIME_POINT{envelope.received().seconds() * 1000 * 1000 + envelope.received().microseconds()};
-
-            uint8_t y = 1;
-            const uint8_t x = 1;
-            for (auto e : mapOfLastEnvelopes) {
-                for (auto ee : e.second) {
-                    auto env = ee.second;
-                    std::stringstream sstr;
-
-                    sstr << "Envelope: " << std::setfill(' ') << std::setw(5) << env.dataType() << std::setw(0) << "/" << env.senderStamp() << "; " << "sent: " << formatTimeStamp(env.sent()) << "; sample: " << formatTimeStamp(env.sampleTimeStamp());
-                    if (scopeOfMetaMessages.count(env.dataType()) > 0) {
-                        sstr << "; " << scopeOfMetaMessages[env.dataType()].messageName();
-                    }
-                    else {
-                        sstr << "; unknown data type";
-                    }
-                    sstr << std::endl;
-
-                    const auto AGE{LAST_TIME_POINT - (env.received().seconds() * 1000 * 1000 + env.received().microseconds())};
-
-                    Color c = Color::DEFAULT;
-                    if (AGE <= 2 * 1000 * 1000) { c = Color::GREEN; }
-                    if (AGE > 2 * 1000 * 1000 && AGE <= 5 * 1000 * 1000) { c = Color::YELLOW; }
-                    if (AGE > 5 * 1000 * 1000) { c = Color::RED; }
-
-                    writeText(c, y++, x, sstr.str());
+            int64_t lastTimeStamp{0};
+            int64_t currentTimeStamp{0};
+            {
+                // Update mapping for tupel (dataType, senderStamp) --> Envelope.
+                auto entry = mapOfLastEnvelopes[envelope.dataType()];
+                if (0 != entry.count(envelope.senderStamp())) {
+                    lastTimeStamp = cluon::time::toMicroseconds(entry[envelope.senderStamp()].sampleTimeStamp()); // LCOV_EXCL_LINE
                 }
+                currentTimeStamp = cluon::time::toMicroseconds(envelope.sampleTimeStamp()); // LCOV_EXCL_LINE
+                if (currentTimeStamp != lastTimeStamp) {
+                    entry[envelope.senderStamp()] = envelope; // LCOV_EXCL_LINE
+                    mapOfLastEnvelopes[envelope.dataType()] = entry; // LCOV_EXCL_LINE
+                }
+            }
+            if (currentTimeStamp != lastTimeStamp) {
+                // Update mapping for tupel (dataType, senderStamp) --> deltaToLastEnvelope.
+                auto entry = mapOfUpdateRates[envelope.dataType()];
+
+                float average{0};
+                if (0 != entry.count(envelope.senderStamp())) {
+                    average = entry[envelope.senderStamp()]; // LCOV_EXCL_LINE
+                    float freq = (static_cast<float>(currentTimeStamp - lastTimeStamp))/(1000.0f*1000.0f); // LCOV_EXCL_LINE
+                    average = (1.0f/freq)*0.1f + 0.9f*average; // LCOV_EXCL_LINE
+                }
+                entry[envelope.senderStamp()] = average;
+                mapOfUpdateRates[envelope.dataType()] = entry;
             }
         });
 
         if (od4Session.isRunning()) {
-            using namespace std::literals::chrono_literals; // NOLINT
-            while (od4Session.isRunning()) {
-                std::this_thread::sleep_for(1s);
-            }
+            od4Session.timeTrigger(5, [&mapOfLastEnvelopesMutex, &mapOfLastEnvelopes, &mapOfUpdateRates, &scopeOfMetaMessages, &od4Session](){
+                std::lock_guard<std::mutex> lck(mapOfLastEnvelopesMutex);
+
+                if (!mapOfLastEnvelopes.empty()) {
+                    clearScreen();
+
+                    uint8_t y = 1;
+                    const uint8_t x = 1;
+                    for (auto e : mapOfLastEnvelopes) {
+                        for (auto ee : e.second) {
+                            auto env = ee.second;
+                            std::stringstream sstr;
+
+                            float freq{0};
+                            if ( (0 < mapOfUpdateRates.count(ee.second.dataType())) && (0 < mapOfUpdateRates[ee.second.dataType()].count(ee.second.senderStamp())) ) {
+                                freq = mapOfUpdateRates[ee.second.dataType()][ee.second.senderStamp()];
+                            }
+
+                            sstr << "Envelope: " << std::setfill(' ') << std::setw(5) << env.dataType() << std::setw(0) << "/" << env.senderStamp() << "; " << (static_cast<float>(static_cast<uint32_t>(freq*100.0f))/100.f) << " Hz; " << "sent: " << formatTimeStamp(env.sent()) << "; sample: " << formatTimeStamp(env.sampleTimeStamp());
+                            if (scopeOfMetaMessages.count(env.dataType()) > 0) {
+                                sstr << "; " << scopeOfMetaMessages[env.dataType()].messageName();
+                            }
+                            else {
+                                sstr << "; unknown data type";
+                            }
+                            sstr << std::endl;
+
+                            const auto AGE{cluon::time::deltaInMicroseconds(cluon::time::now(), env.received())};
+
+                            Color c = Color::DEFAULT;
+                            if (AGE <= 2 * 1000 * 1000) { c = Color::GREEN; }
+                            if (AGE > 2 * 1000 * 1000 && AGE <= 5 * 1000 * 1000) { c = Color::YELLOW; }
+                            if (AGE > 5 * 1000 * 1000) { c = Color::RED; }
+
+                            writeText(c, y++, x, sstr.str());
+                        }
+                    }
+                }
+                return od4Session.isRunning();
+            });
 
             retVal = 0;
         }
@@ -17511,6 +17864,8 @@ inline int32_t cluon_rec2csv(int32_t argc, char **argv) {
         // Maps of container-ID & sender-stamp.
         std::map<std::string, std::string> mapOfFilenames;
         std::map<std::string, std::string> mapOfEntries;
+        std::map<std::string, size_t> mapOfEntriesSizes;
+        std::map<std::string, bool> mapOfFilenamesThatHaveBeenReset;
 
         cluon::MessageParser mp;
         std::pair<std::vector<cluon::MetaMessage>, cluon::MessageParser::MessageParserErrorCodes> messageParserResult;
@@ -17532,14 +17887,33 @@ inline int32_t cluon_rec2csv(int32_t argc, char **argv) {
         if (fin.good()) {
             fin.close();
 
+            auto fileWriter = [argv, &mapOfFilenames, &mapOfEntries, &mapOfEntriesSizes, &mapOfFilenamesThatHaveBeenReset](){
+              for(auto entries : mapOfFilenames) {
+                  std::cerr << argv[0] << " writing '" << entries.second << ".csv'...";
+                  // Reset files on first access.
+                  std::ios_base::openmode openMode = std::ios::out|std::ios::binary|(mapOfFilenamesThatHaveBeenReset.count(entries.second) == 0 ? std::ios::trunc : std::ios::app);
+                  std::fstream fout(entries.second + ".csv", openMode);
+                  if (fout.good() && mapOfEntries.count(entries.first)) {
+                      const std::string tmp{mapOfEntries[entries.first]};
+                      fout.write(tmp.c_str(), static_cast<std::streamsize>(tmp.size()));
+                      // Reset memory.
+                      mapOfEntries[entries.first] = "";
+                      mapOfEntriesSizes[entries.first] = 0;
+                  }
+                  fout.close();
+                  mapOfFilenamesThatHaveBeenReset[entries.second] = true;
+                  std::cerr << " done." << std::endl;
+              }
+            };
+
             std::map<int32_t, cluon::MetaMessage> scope;
             for (const auto &e : messageParserResult.first) { scope[e.messageIdentifier()] = e; }
 
-            constexpr bool AUTOREWIND{false};
-            constexpr bool THREADING{false};
+            constexpr const bool AUTOREWIND{false};
+            constexpr const bool THREADING{false};
             cluon::Player player(commandlineArguments["rec"], AUTOREWIND, THREADING);
 
-
+            constexpr const size_t TEN_MB{10*1024*1024};
             uint32_t envelopeCounter{0};
             int32_t oldPercentage = -1;
             while (player.hasMoreData()) {
@@ -17584,8 +17958,11 @@ inline int32_t cluon_rec2csv(int32_t argc, char **argv) {
 
                             cluon::ToCSVVisitor csv(';', false);
                             gm.accept(csv);
-                            mapOfEntries[KEY] += stringtoolbox::split(timeStamps, '\n')[0] + csv.csv();
-                        }
+
+                            std::string entry{stringtoolbox::split(timeStamps, '\n')[0] + csv.csv()};
+                            mapOfEntries[KEY] += entry;
+                            mapOfEntriesSizes[KEY] += entry.size();
+                       }
                         else {
                             // Extract timestamps.
                             std::vector<std::string> timeStampsWithHeader;
@@ -17600,22 +17977,21 @@ inline int32_t cluon_rec2csv(int32_t argc, char **argv) {
                             gm.accept(csv);
 
                             std::vector<std::string> valuesWithHeader = stringtoolbox::split(csv.csv(), '\n');
+                            std::string entry{timeStampsWithHeader.at(0) + valuesWithHeader.at(0) + '\n' + timeStampsWithHeader.at(1) + valuesWithHeader.at(1) + '\n'};
+                            mapOfEntries[KEY] += entry;
+                            mapOfEntriesSizes[KEY] += entry.size();
+                        }
 
-                            mapOfEntries[KEY] += timeStampsWithHeader.at(0) + valuesWithHeader.at(0) + '\n' + timeStampsWithHeader.at(1) + valuesWithHeader.at(1) + '\n';
+                        // Keep track of buffer sizes.
+                        if (mapOfEntriesSizes[KEY] > TEN_MB) {
+                            std::cerr << argv[0] << ": Buffer for '" << KEY << "' has consumed " << mapOfEntriesSizes[KEY] << "/" << TEN_MB << " bytes; dumping data to disk."<< std::endl; // LCOV_EXCL_LINE
+                            fileWriter(); // LCOV_EXCL_LINE
                         }
                     }
                 }
             }
-            for(auto entries : mapOfFilenames) {
-                std::cerr << argv[0] << " writing '" << entries.second << ".csv'...";
-                std::fstream fout(entries.second + ".csv", std::ios::out|std::ios::binary|std::ios::trunc);
-                if (fout.good() && mapOfEntries.count(entries.first)) {
-                    const std::string tmp{mapOfEntries[entries.first]};
-                    fout.write(tmp.c_str(), static_cast<std::streamsize>(tmp.size()));
-                }
-                fout.close();
-                std::cerr << " done." << std::endl;
-            }
+            // Clear buffer at the end.
+            fileWriter();
         }
         else {
             std::cerr << argv[0] << ": Recording '" << commandlineArguments["rec"] << "' not found." << std::endl;

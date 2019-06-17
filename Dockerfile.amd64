@@ -32,7 +32,7 @@ RUN cd tmp && \
     cd libyuv &&\
     make -f linux.mk libyuv.a && cp libyuv.a /usr/lib/x86_64-linux-gnu && cd include && cp -r * /usr/include
 RUN cd tmp && \
-    git clone --depth 1 --branch v1.8.0 https://github.com/cisco/openh264.git && \
+    git clone --depth 1 --branch v2.0.0 https://github.com/cisco/openh264.git && \
     cd openh264 && mkdir b && cd b \
     make -j2 -f ../Makefile libraries && make -f ../Makefile install
 ADD . /opt/sources
@@ -41,7 +41,7 @@ RUN mkdir build && \
     cd build && \
     cmake -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/tmp .. && \
     make && make install
-RUN cd /tmp && wget http://ciscobinary.openh264.org/libopenh264-1.8.0-linux64.4.so.bz2
+RUN cd /tmp && wget http://ciscobinary.openh264.org/libopenh264-2.0.0-linux64.5.so.bz2
 
 # Part to deploy opendlv-video-h264-decoder.
 FROM ubuntu:18.04
@@ -53,9 +53,9 @@ RUN apt-get update -y && \
     apt-get install -y --no-install-recommends libx11-6
 
 WORKDIR /usr/lib/x86_64-linux-gnu
-COPY --from=builder /tmp/libopenh264-1.8.0-linux64.4.so.bz2 .
-RUN bunzip2 libopenh264-1.8.0-linux64.4.so.bz2 && \
-    ln -sf libopenh264-1.8.0-linux64.4.so libopenh264.so.4
+COPY --from=builder /tmp/libopenh264-2.0.0-linux64.5.so.bz2 .
+RUN bunzip2 libopenh264-2.0.0-linux64.5.so.bz2 && \
+    ln -sf libopenh264-2.0.0-linux64.5.so libopenh264.so.5
 
 WORKDIR /usr/bin
 COPY --from=builder /tmp/bin/opendlv-video-h264-decoder .
