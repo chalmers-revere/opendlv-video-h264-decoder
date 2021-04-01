@@ -28,8 +28,9 @@ RUN apt-get update -y && \
         nasm \
         wget
 RUN cd tmp && \
-    git clone --depth 1 https://chromium.googlesource.com/libyuv/libyuv && \
+    git clone https://chromium.googlesource.com/libyuv/libyuv && \
     cd libyuv &&\
+    git checkout -b working 2525698acba9bf9b701ba6b4d9584291a1f62257 && \
     make -f linux.mk libyuv.a && cp libyuv.a /usr/lib/x86_64-linux-gnu && cd include && cp -r * /usr/include
 RUN cd tmp && \
     git clone --depth 1 --branch v2.0.0 https://github.com/cisco/openh264.git && \
