@@ -1,4 +1,4 @@
-# Copyright (C) 2018  Christian Berger
+# Copyright (C) 2022  Christian Berger
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ project(opendlv-video-h264-decoder)
 ################################################################################
 # Defining the relevant versions of OpenDLV Standard Message Set and libcluon.
 set(OPENDLV_STANDARD_MESSAGE_SET opendlv-standard-message-set-v0.9.6.odvd)
-set(CLUON_COMPLETE cluon-complete-v0.0.121.hpp)
+set(CLUON_COMPLETE cluon-complete-v0.0.140.hpp)
 
 ################################################################################
 # Set the search path for .cmake files.
